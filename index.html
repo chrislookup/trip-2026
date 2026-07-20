@@ -280,13 +280,13 @@ async function setVote(weekend_id,status){
   votes = votes.filter(v=>!(v.member===me && v.weekend_id===weekend_id));
   if(status) votes.push({member:me,weekend_id,status});
   render();
+  // delete any existing verdict first, then insert fresh (robust under RLS; avoids upsert on-conflict quirk)
+  const del = await db.from('trip_availability').delete().eq('member',me).eq('weekend_id',weekend_id);
+  if(del.error){ toast("Save error: "+del.error.message); }
   if(status){
     const {error}=await db.from('trip_availability')
-      .upsert({member:me,weekend_id,status,updated_at:new Date().toISOString()},{onConflict:'member,weekend_id'});
+      .insert({member:me,weekend_id,status,updated_at:new Date().toISOString()});
     if(error) toast("Save error: "+error.message);
-  } else {
-    const {error}=await db.from('trip_availability').delete().eq('member',me).eq('weekend_id',weekend_id);
-    if(error) toast("Clear error: "+error.message);
   }
   checkFullHouse();
 }
