@@ -80,6 +80,15 @@
   .av{font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;border:1px solid transparent}
   .av.y{background:rgba(47,191,113,.16);color:var(--green);border-color:var(--green-d)}
   .av.n{background:rgba(229,72,77,.14);color:var(--red);border-color:var(--red-d)}
+  .av.q{background:rgba(142,163,184,.12);color:var(--muted);border-color:var(--line)}
+  .wtoggle{background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer;padding:3px 0;font-weight:600}
+  .wtoggle:hover{text-decoration:underline}
+  .detail{margin:2px 0;padding:9px 11px;background:#12202c;border:1px solid var(--line);border-radius:9px}
+  .grp{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:5px 0}
+  .grp .lbl{font-size:11px;font-weight:700;margin-right:4px;white-space:nowrap}
+  .lbl.y{color:var(--green)} .lbl.n{color:var(--red)} .lbl.q{color:var(--muted)}
+  .hdr-toggle{font-size:12px;font-weight:600;color:var(--blue);cursor:pointer;background:none;border:none}
+  .hdr-toggle:hover{text-decoration:underline}
   .btns{display:flex;gap:8px}
   .btns button{flex:1;padding:8px;border-radius:9px;border:1px solid var(--line);background:#12202c;
     color:var(--text);font-weight:600;font-size:13px;cursor:pointer;transition:.1s}
@@ -203,7 +212,7 @@
 
     <div class="cols">
       <div class="card">
-        <h3>The weekends <small id="wkHint">tap Available / Nope</small></h3>
+        <h3>The weekends <button class="hdr-toggle" id="expandAllBtn">▸ expand all</button></h3>
         <div id="weekends"></div>
       </div>
       <div>
@@ -278,6 +287,8 @@ const fmt = dt => dt.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',m
 let me = localStorage.getItem("trip_me") || null;
 let votes = [];               // rows: {member, weekend_id, status}
 let db = null;
+let expanded = new Set();      // weekend ids expanded to show who's in/out
+let expandAll = false;
 const $ = s => document.querySelector(s);
 
 /* ---------- boot ---------- */
@@ -315,6 +326,9 @@ function startApp(){
   $("#meName").textContent=me;
   $("#changeName").onclick=()=>{ localStorage.removeItem("trip_me"); me=null;
     $("#app").style.display="none"; $("#gate").style.display="block"; };
+  $("#expandAllBtn").onclick=()=>{ expandAll=!expandAll;
+    $("#expandAllBtn").textContent = expandAll?'▾ collapse all':'▸ expand all';
+    render(); };
   renderAlgo();
   refresh();
   setInterval(refresh, 7000);   // live-ish polling
@@ -431,8 +445,15 @@ function renderWeekends(ranked){
       w.flags.school?`<span class="tag school">🏫 ${w.flags.school}</span>`:"",
       w.flags.note?`<span class="tag note">${w.flags.note}</span>`:""
     ].join("");
-    const avs = s.a.map(m=>`<span class="av y">${m}</span>`).join("")
-              + s.n.map(m=>`<span class="av n">${m}</span>`).join("");
+    const isOpen = expandAll || expanded.has(w.id);
+    const noAns = MEMBERS.filter(m=>!s.a.includes(m) && !s.n.includes(m));
+    const chips = (arr,cls)=> arr.length? arr.map(m=>`<span class="av ${cls}">${m}</span>`).join("") : '<span class="meta">—</span>';
+    const detail = `
+      <div class="detail" style="display:${isOpen?'block':'none'}">
+        <div class="grp"><span class="lbl y">👍 Can go (${s.A})</span>${chips(s.a,'y')}</div>
+        <div class="grp"><span class="lbl n">👎 Can't (${s.N})</span>${chips(s.n,'n')}</div>
+        <div class="grp"><span class="lbl q">🤔 No answer (${noAns.length})</span>${chips(noAns,'q')}</div>
+      </div>`;
     const el=document.createElement("div");
     el.className="wk"+(w.id===leadId?" lead":"");
     el.innerHTML=`
@@ -443,7 +464,8 @@ function renderWeekends(ranked){
         </div>
         <div class="score"><b>${s.A}</b> in · ${s.N} out</div>
       </div>
-      <div class="avatars">${avs||'<span class="meta">no votes yet</span>'}</div>
+      <button class="wtoggle" data-t="${w.id}">${isOpen?'▾ hide who':'▸ who can / can\'t go'}</button>
+      ${detail}
       <div class="btns">
         <button ${lock} class="${mine&&mine.status==='available'?'on-y':''}" data-a="${w.id}">👍 Available</button>
         <button ${lock} class="${mine&&mine.status==='not_available'?'on-n':''}" data-n="${w.id}">👎 Nope</button>
@@ -454,6 +476,11 @@ function renderWeekends(ranked){
   box.querySelectorAll('[data-a]').forEach(x=>x.onclick=()=>setVote(x.dataset.a,'available'));
   box.querySelectorAll('[data-n]').forEach(x=>x.onclick=()=>setVote(x.dataset.n,'not_available'));
   box.querySelectorAll('[data-c]').forEach(x=>x.onclick=()=>setVote(x.dataset.c,null));
+  box.querySelectorAll('[data-t]').forEach(x=>x.onclick=()=>{
+    const id=x.dataset.t;
+    expanded.has(id)?expanded.delete(id):expanded.add(id);
+    render();
+  });
 }
 function renderLeaderboard(){
   const p=participation(); const topYes=Math.max(0,...p.map(x=>x.yes));
