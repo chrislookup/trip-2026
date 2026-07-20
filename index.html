@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<!--
+  ============================================================================
+  THE LADS' ANNUAL TRIP 2026  —  weekend picker
+  ============================================================================
+  SETUP (only 2 lines to change — see below):
+    1. Run the SQL in SETUP.md inside your Supabase project (SQL Editor).
+    2. Paste your Supabase Project URL + anon (public) key in the two lines
+       marked  >>> EDIT ME <<<  just below.
+    3. Commit this file to your GitHub repo and turn on GitHub Pages.
+  The anon key is SAFE to publish — it can only touch the trip_availability
+  table (locked down by Row Level Security). Nothing else on your Supabase.
+  ============================================================================
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Lads' Annual Trip 2026 🏕️</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#0f1720; --panel:#17222e; --panel2:#1e2c3a; --line:#2b3d4f;
+    --text:#e8eef5; --muted:#8ea3b8; --green:#2fbf71; --green-d:#1c7f4c;
+    --red:#e5484d; --red-d:#9b2d31; --gold:#f5c542; --blue:#4c9be8;
+    --shadow:0 8px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:radial-gradient(1200px 600px at 50% -10%,#1b2a3a,var(--bg));color:var(--text);
+    -webkit-font-smoothing:antialiased;min-height:100vh}
+  a{color:var(--blue)}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px 16px 60px}
+  header.top{text-align:center;padding:14px 0 6px}
+  header.top h1{margin:0;font-size:30px;letter-spacing:.3px}
+  header.top p{margin:6px 0 0;color:var(--muted);font-size:14px}
+  .pill{display:inline-block;background:var(--panel2);border:1px solid var(--line);border-radius:999px;
+    padding:3px 10px;font-size:12px;color:var(--muted);margin:0 3px}
+
+  /* Entry / name gate */
+  .gate{max-width:440px;margin:40px auto;background:var(--panel);border:1px solid var(--line);
+    border-radius:18px;padding:26px;box-shadow:var(--shadow);text-align:center}
+  .gate h2{margin:0 0 6px}
+  .gate p{color:var(--muted);margin:0 0 18px;font-size:14px}
+  .names{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .names button{padding:12px 6px;border-radius:12px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--text);font-size:15px;font-weight:600;cursor:pointer;transition:.12s}
+  .names button:hover{border-color:var(--blue);transform:translateY(-2px)}
+
+  /* Banner */
+  .winner{background:linear-gradient(135deg,#22364a,#16222f);border:1px solid var(--line);
+    border-radius:18px;padding:18px 20px;margin:14px 0;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .winner .crown{font-size:26px}
+  .winner h2{margin:2px 0 2px;font-size:22px}
+  .winner .sub{color:var(--muted);font-size:13px}
+  .winner .bar{height:8px;background:var(--panel2);border-radius:6px;margin-top:12px;overflow:hidden}
+  .winner .bar > i{display:block;height:100%;background:linear-gradient(90deg,var(--green),var(--gold));border-radius:6px}
+
+  /* Layout */
+  .cols{display:grid;grid-template-columns:1fr;gap:14px}
+  @media(min-width:860px){.cols{grid-template-columns:1.6fr 1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px 14px 6px}
+  .card h3{margin:2px 4px 10px;font-size:15px;display:flex;justify-content:space-between;align-items:center}
+  .card h3 small{color:var(--muted);font-weight:500}
+
+  /* Weekend rows */
+  .wk{display:flex;flex-direction:column;gap:8px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:12px;padding:10px 12px;margin:0 4px 10px}
+  .wk.lead{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold) inset}
+  .wk .row1{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+  .wk .date{font-weight:700;font-size:15px}
+  .wk .meta{font-size:12px;color:var(--muted);margin-top:2px}
+  .tag{display:inline-block;font-size:11px;border-radius:6px;padding:1px 6px;margin:3px 4px 0 0}
+  .tag.long{background:rgba(245,197,66,.15);color:var(--gold);border:1px solid rgba(245,197,66,.4)}
+  .tag.school{background:rgba(76,155,232,.13);color:var(--blue);border:1px solid rgba(76,155,232,.35)}
+  .tag.note{background:rgba(142,163,184,.12);color:var(--muted);border:1px solid var(--line)}
+  .score{font-size:12px;color:var(--muted);white-space:nowrap;text-align:right}
+  .score b{color:var(--text);font-size:15px}
+  .avatars{display:flex;flex-wrap:wrap;gap:4px}
+  .av{font-size:11px;font-weight:700;border-radius:6px;padding:2px 6px;border:1px solid transparent}
+  .av.y{background:rgba(47,191,113,.16);color:var(--green);border-color:var(--green-d)}
+  .av.n{background:rgba(229,72,77,.14);color:var(--red);border-color:var(--red-d)}
+  .btns{display:flex;gap:8px}
+  .btns button{flex:1;padding:8px;border-radius:9px;border:1px solid var(--line);background:#12202c;
+    color:var(--text);font-weight:600;font-size:13px;cursor:pointer;transition:.1s}
+  .btns button:hover{transform:translateY(-1px)}
+  .btns button.on-y{background:var(--green-d);border-color:var(--green)}
+  .btns button.on-n{background:var(--red-d);border-color:var(--red)}
+  .btns button.clr{flex:0 0 42px;color:var(--muted)}
+
+  /* Leaderboard */
+  .lb{display:flex;flex-direction:column;gap:6px;margin:0 4px}
+  .lb .rowp{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:8px 10px}
+  .lb .rank{width:22px;text-align:center;font-weight:800;color:var(--muted)}
+  .lb .who{flex:1;font-weight:700}
+  .lb .who .badges{font-size:11px;color:var(--muted);font-weight:500;margin-left:6px}
+  .lb .pts{font-weight:800;color:var(--gold)}
+  .lb .me{outline:1px solid var(--blue)}
+
+  .foot{margin-top:22px;color:var(--muted);font-size:13px;line-height:1.5}
+  details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-top:12px}
+  summary{cursor:pointer;font-weight:700}
+  .who-tab{display:flex;justify-content:center;align-items:center;gap:10px;margin:6px 0 2px}
+  .who-tab .chg{font-size:12px;color:var(--blue);cursor:pointer;text-decoration:underline}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#12202c;border:1px solid var(--line);
+    padding:10px 16px;border-radius:10px;box-shadow:var(--shadow);font-size:13px;opacity:0;pointer-events:none;transition:.25s}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px)}
+  canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:50}
+  .warn{background:rgba(229,72,77,.12);border:1px solid var(--red-d);color:#ffbfc0;border-radius:12px;
+    padding:12px 14px;margin:14px 0;font-size:13px}
+  .strip{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+  .chip{flex:1 1 180px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .chip .lab{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .chip .big{font-size:16px;font-weight:800;margin-top:2px}
+  .chip.count .big{color:var(--gold)}
+  .chip.dead .big{color:var(--red)}
+  .miss{display:inline-block;font-size:11px;font-weight:700;background:rgba(245,197,66,.14);color:var(--gold);
+    border:1px solid rgba(245,197,66,.4);border-radius:6px;padding:1px 6px;margin:3px 4px 0 0}
+  .locked-note{background:rgba(245,197,66,.12);border:1px solid rgba(245,197,66,.4);color:var(--gold);
+    border-radius:12px;padding:10px 14px;margin:0 0 14px;font-weight:700;text-align:center}
+  .btns button:disabled{opacity:.4;cursor:not-allowed;transform:none}
+</style>
+</head>
+<body>
+<canvas id="cf"></canvas>
+<div class="wrap">
+  <header class="top">
+    <h1>🏕️ The Lads' Annual Trip 2026</h1>
+    <p>Pick every weekend you can make it. Most bodies wins. Ghosting is noticed. 👀</p>
+    <div>
+      <span class="pill">23 weekends</span>
+      <span class="pill">Sat + Sun both days</span>
+      <span class="pill">🎉 = long weekend</span>
+      <span class="pill">🏫 = school holidays</span>
+    </div>
+  </header>
+
+  <div id="config-warn"></div>
+
+  <!-- NAME GATE -->
+  <div id="gate" class="gate" style="display:none">
+    <h2>Who are ya?</h2>
+    <p>Pick your name. You can only change your own picks — no sabotage. 😈</p>
+    <div class="names" id="nameBtns"></div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app" style="display:none">
+    <div class="who-tab">
+      <span>Playing as <b id="meName"></b></span>
+      <span class="chg" id="changeName">(not you? switch)</span>
+    </div>
+
+    <div class="winner" id="winnerBanner"></div>
+    <div id="watchStrip"></div>
+
+    <div class="cols">
+      <div class="card">
+        <h3>The weekends <small id="wkHint">tap Available / Nope</small></h3>
+        <div id="weekends"></div>
+      </div>
+      <div>
+        <div class="card">
+          <h3>🏆 Participation leaderboard <small>points = decisions made</small></h3>
+          <div class="lb" id="leaderboard"></div>
+        </div>
+        <details>
+          <summary>How the winner is picked 🧮</summary>
+          <div class="foot" id="algoExplainer"></div>
+        </details>
+        <details>
+          <summary>Badges you can earn 🎖️</summary>
+          <div class="foot">
+            💯 <b>Full House</b> — a verdict on all 23 weekends.<br>
+            🔥 <b>On Fire</b> — 15+ verdicts.<br>
+            ✅ <b>Yes Legend</b> — most "available" ticks of anyone.<br>
+            👻 <b>Ghost</b> — 0 verdicts. Don't be this guy.
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="foot">
+      <p><b>How it works:</b> Tick <b style="color:var(--green)">Available</b> on every weekend both days work for you,
+      or <b style="color:var(--red)">Nope</b> if you can't. Leave it blank if you're not sure.
+      The more weekends you rule on either way, the more participation points you rack up. The winning weekend updates
+      <b>live</b> as everyone votes — refresh anytime. Don't overthink it, tick fast and tick lots.</p>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ======================= 1. CONFIG — EDIT THESE TWO LINES ======================= */
+const SUPABASE_URL  = "https://qaxuyvmftvbkvgdwhlkp.supabase.co";
+const SUPABASE_ANON  = "sb_publishable_I-hZVyI6F6HgYJ4aaqvcxA_y7Yq92ME";  // publishable key — safe to publish
+/* =============================================================================== */
+
+const MEMBERS = ["Chris","Ben L","Ben R","Brendan","Joe","Ross","Sam","Scott","Andrew"];
+
+/* Voting closes at this moment (local time). Edit to whatever suits — after this,
+   picks lock and the winner is FINAL. Set to null to never close. */
+const VOTE_DEADLINE = new Date("2026-08-31T20:00:00+10:00");   // Sun 31 Aug 2026, 8pm AEST
+
+/* Holiday / school-holiday flags for QLD 2026 (Sat-anchored weekends). */
+const FLAGS = {
+  "2026-08-08":{note:"Ekka week ahead (Brisbane hol Wed 12 Aug)"},
+  "2026-09-19":{school:"School holidays begin"},
+  "2026-09-26":{school:"School holidays"},
+  "2026-10-03":{long:"King's Birthday long weekend — Mon 5 Oct off!",school:"School holidays"},
+  "2026-12-12":{school:"Summer school holidays"},
+  "2026-12-19":{school:"Summer school holidays"},
+  "2026-12-26":{long:"Boxing Day (Mon 28 off)",school:"Christmas — family time?"}
+};
+
+/* Build the 23 weekends: every Saturday from 25 Jul to 26 Dec 2026. */
+function buildWeekends(){
+  const out=[]; let d=new Date(Date.UTC(2026,6,25)); const end=new Date(Date.UTC(2026,11,31));
+  while(d<=end){
+    const sat=new Date(d), sun=new Date(d); sun.setUTCDate(sun.getUTCDate()+1);
+    const id=sat.toISOString().slice(0,10);
+    out.push({id,sat,sun,flags:FLAGS[id]||{}});
+    d.setUTCDate(d.getUTCDate()+7);
+  }
+  return out;
+}
+const WEEKENDS = buildWeekends();
+const fmt = dt => dt.toLocaleDateString('en-AU',{weekday:'short',day:'numeric',month:'short',timeZone:'UTC'});
+
+let me = localStorage.getItem("trip_me") || null;
+let votes = [];               // rows: {member, weekend_id, status}
+let db = null;
+const $ = s => document.querySelector(s);
+
+/* ---------- boot ---------- */
+if(SUPABASE_URL.includes("YOUR-PROJECT")){
+  $("#config-warn").innerHTML =
+    `<div class="warn">⚙️ <b>Almost there.</b> This app isn't connected yet. Paste your Supabase
+     <b>Project URL</b> and <b>anon public key</b> into the two lines at the top of the &lt;script&gt; in this file
+     (see SETUP.md), then commit. Until then, voting won't save.</div>`;
+} else {
+  db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+}
+renderGate();
+if(me) startApp();
+
+/* ---------- name gate ---------- */
+function renderGate(){
+  const box=$("#nameBtns"); box.innerHTML="";
+  MEMBERS.forEach(n=>{
+    const b=document.createElement("button"); b.textContent=n;
+    b.onclick=()=>{ me=n; localStorage.setItem("trip_me",n); startApp(); };
+    box.appendChild(b);
+  });
+}
+function startApp(){
+  $("#gate").style.display="none"; $("#app").style.display="block";
+  $("#meName").textContent=me;
+  $("#changeName").onclick=()=>{ localStorage.removeItem("trip_me"); me=null;
+    $("#app").style.display="none"; $("#gate").style.display="block"; };
+  renderAlgo();
+  refresh();
+  setInterval(refresh, 7000);   // live-ish polling
+}
+
+/* ---------- data ---------- */
+async function refresh(){
+  if(!db) { render(); return; }
+  const {data,error}=await db.from('trip_availability').select('member,weekend_id,status');
+  if(error){ toast("Load error: "+error.message); return; }
+  votes=data||[]; render();
+}
+function isLocked(){ return VOTE_DEADLINE && new Date() >= VOTE_DEADLINE; }
+async function setVote(weekend_id,status){
+  if(isLocked()){ toast("🔒 Voting has closed — the winner is final."); return; }
+  if(!db){ toast("Not connected yet — see SETUP.md"); return; }
+  // optimistic
+  votes = votes.filter(v=>!(v.member===me && v.weekend_id===weekend_id));
+  if(status) votes.push({member:me,weekend_id,status});
+  render();
+  if(status){
+    const {error}=await db.from('trip_availability')
+      .upsert({member:me,weekend_id,status,updated_at:new Date().toISOString()},{onConflict:'member,weekend_id'});
+    if(error) toast("Save error: "+error.message);
+  } else {
+    const {error}=await db.from('trip_availability').delete().eq('member',me).eq('weekend_id',weekend_id);
+    if(error) toast("Clear error: "+error.message);
+  }
+  checkFullHouse();
+}
+
+/* ---------- scoring ---------- */
+function weekendStats(id){
+  const a=votes.filter(v=>v.weekend_id===id && v.status==='available');
+  const n=votes.filter(v=>v.weekend_id===id && v.status==='not_available');
+  return {a:a.map(v=>v.member), n:n.map(v=>v.member),
+          A:a.length, N:n.length,
+          score:a.length*2 - n.length};       // available = +2, nope = -1
+}
+function rankedWeekends(){
+  return WEEKENDS.map(w=>({w,s:weekendStats(w.id)}))
+    .sort((x,y)=>
+      y.s.score-x.s.score ||           // 1) highest score
+      y.s.A-x.s.A ||                    // 2) most people actually there
+      x.s.N-y.s.N ||                    // 3) fewest hard no's
+      ((y.w.flags.long?1:0)-(x.w.flags.long?1:0)) || // 4) long weekend edge
+      (x.w.sat-y.w.sat)                 // 5) earliest date (plan sooner)
+    );
+}
+function participation(){
+  return MEMBERS.map(m=>{
+    const mine=votes.filter(v=>v.member===m);
+    const yes=mine.filter(v=>v.status==='available').length;
+    return {m, pts:mine.length, yes, total:mine.length};
+  }).sort((a,b)=> b.pts-a.pts || b.yes-a.yes || a.m.localeCompare(b.m));
+}
+
+/* ---------- render ---------- */
+function render(){
+  const ranked=rankedWeekends();
+  renderWinner(ranked);
+  renderWatch(ranked);
+  renderWeekends(ranked);
+  renderLeaderboard();
+}
+function countdownText(){
+  if(!VOTE_DEADLINE) return "no deadline";
+  const ms=VOTE_DEADLINE-new Date();
+  if(ms<=0) return "CLOSED";
+  const d=Math.floor(ms/864e5), h=Math.floor(ms%864e5/36e5), m=Math.floor(ms%36e5/6e4);
+  return d>0?`${d}d ${h}h left`:h>0?`${h}h ${m}m left`:`${m}m left`;
+}
+function renderWatch(ranked){
+  const notVoted=MEMBERS.filter(m=>!votes.some(v=>v.member===m));
+  const dead=ranked.length?[...ranked].sort((a,b)=> b.s.N-a.s.N || b.s.score-a.s.score)[0]:null;
+  const chips=[];
+  chips.push(`<div class="chip count"><div class="lab">⏳ Voting ${isLocked()?'closed':'closes'}</div>
+    <div class="big">${countdownText()}</div></div>`);
+  chips.push(`<div class="chip"><div class="lab">👀 Still to vote (${notVoted.length})</div>
+    <div class="big" style="font-size:13px;font-weight:600">
+    ${notVoted.length? notVoted.map(m=>`<span class="miss">${m}</span>`).join('') : '🎉 Everyone\'s in!'}</div></div>`);
+  if(dead && dead.s.N>0){
+    chips.push(`<div class="chip dead"><div class="lab">💀 Deadest weekend</div>
+      <div class="big">${fmt(dead.w.sat)} <span style="font-size:12px;color:var(--muted)">(${dead.s.N} nope${dead.s.N===1?'':'s'})</span></div></div>`);
+  }
+  $("#watchStrip").innerHTML =
+    (isLocked()?`<div class="locked-note">🔒 Voting has closed — the weekend above is FINAL. Time to book. 🍻</div>`:'')
+    + `<div class="strip">${chips.join('')}</div>`;
+}
+function renderWinner(ranked){
+  const top=ranked[0]; const anyVotes=votes.length>0;
+  const b=$("#winnerBanner");
+  if(!anyVotes){
+    b.innerHTML=`<div class="crown">🥁</div><h2>No votes yet…</h2>
+      <div class="sub">Be the first to lock in a weekend and take an early lead.</div>`;
+    return;
+  }
+  const s=top.s, maxA=MEMBERS.length;
+  b.innerHTML=`<div class="crown">🏆</div>
+    <h2>${fmt(top.w.sat)} → ${fmt(top.w.sun)}</h2>
+    <div class="sub"><b style="color:var(--green)">${s.A}</b> can make it ·
+      <b style="color:var(--red)">${s.N}</b> can't · score ${s.score}
+      ${top.w.flags.long?' · 🎉 long weekend':''}${top.w.flags.school?' · 🏫':''}</div>
+    <div class="bar"><i style="width:${Math.max(6,Math.round(s.A/maxA*100))}%"></i></div>`;
+}
+function renderWeekends(ranked){
+  const leadId=ranked[0] && votes.length? ranked[0].w.id : null;
+  const box=$("#weekends"); box.innerHTML=""; const lock=isLocked()?'disabled':'';
+  WEEKENDS.forEach(w=>{
+    const s=weekendStats(w.id);
+    const mine=votes.find(v=>v.member===me && v.weekend_id===w.id);
+    const tags=[
+      w.flags.long?`<span class="tag long">🎉 ${w.flags.long}</span>`:"",
+      w.flags.school?`<span class="tag school">🏫 ${w.flags.school}</span>`:"",
+      w.flags.note?`<span class="tag note">${w.flags.note}</span>`:""
+    ].join("");
+    const avs = s.a.map(m=>`<span class="av y">${m}</span>`).join("")
+              + s.n.map(m=>`<span class="av n">${m}</span>`).join("");
+    const el=document.createElement("div");
+    el.className="wk"+(w.id===leadId?" lead":"");
+    el.innerHTML=`
+      <div class="row1">
+        <div>
+          <div class="date">${w.id===leadId?"👑 ":""}${fmt(w.sat)} – ${fmt(w.sun)}</div>
+          <div class="meta">${tags||'<span class="tag note">regular weekend</span>'}</div>
+        </div>
+        <div class="score"><b>${s.A}</b> in · ${s.N} out</div>
+      </div>
+      <div class="avatars">${avs||'<span class="meta">no votes yet</span>'}</div>
+      <div class="btns">
+        <button ${lock} class="${mine&&mine.status==='available'?'on-y':''}" data-a="${w.id}">👍 Available</button>
+        <button ${lock} class="${mine&&mine.status==='not_available'?'on-n':''}" data-n="${w.id}">👎 Nope</button>
+        <button ${lock} class="clr" data-c="${w.id}" title="clear">✕</button>
+      </div>`;
+    box.appendChild(el);
+  });
+  box.querySelectorAll('[data-a]').forEach(x=>x.onclick=()=>setVote(x.dataset.a,'available'));
+  box.querySelectorAll('[data-n]').forEach(x=>x.onclick=()=>setVote(x.dataset.n,'not_available'));
+  box.querySelectorAll('[data-c]').forEach(x=>x.onclick=()=>setVote(x.dataset.c,null));
+}
+function renderLeaderboard(){
+  const p=participation(); const topYes=Math.max(0,...p.map(x=>x.yes));
+  const medals=["🥇","🥈","🥉"];
+  const box=$("#leaderboard"); box.innerHTML="";
+  p.forEach((x,i)=>{
+    const badges=[];
+    if(x.total===WEEKENDS.length) badges.push("💯");
+    else if(x.total>=15) badges.push("🔥");
+    if(x.yes===topYes && topYes>0) badges.push("✅");
+    if(x.total===0) badges.push("👻");
+    const row=document.createElement("div");
+    row.className="rowp"+(x.m===me?" me":"");
+    row.innerHTML=`<div class="rank">${medals[i]||i+1}</div>
+      <div class="who">${x.m}<span class="badges">${badges.join(" ")}</span></div>
+      <div class="pts">${x.pts} pt${x.pts===1?"":"s"}</div>`;
+    box.appendChild(row);
+  });
+}
+function renderAlgo(){
+  $("#algoExplainer").innerHTML=`
+    Every weekend gets a <b>live score</b>:<br>
+    &nbsp;&nbsp;<b>score = (👍 available × 2) − (👎 nope × 1)</b><br>
+    Being available counts double a "nope", and blanks count as zero — so the weekend the
+    most lads can actually attend floats to the top. Ties break by: most people in → fewest
+    hard no's → long weekend → earliest date. It recalculates every time anyone votes.`;
+}
+
+/* ---------- fun ---------- */
+function checkFullHouse(){
+  const mine=votes.filter(v=>v.member===me).length;
+  if(mine===WEEKENDS.length){ confetti(); toast("💯 Full House! You ruled on every weekend. Legend."); }
+}
+let toastT;
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2600); }
+function confetti(){
+  const c=$("#cf"), x=c.getContext('2d'); c.width=innerWidth; c.height=innerHeight;
+  const P=Array.from({length:140},()=>({x:Math.random()*c.width,y:-20-Math.random()*c.height,
+    r:4+Math.random()*6,vy:2+Math.random()*4,vx:-2+Math.random()*4,
+    col:['#f5c542','#2fbf71','#4c9be8','#e5484d','#fff'][~~(Math.random()*5)],a:Math.random()*6}));
+  let f=0; (function loop(){ x.clearRect(0,0,c.width,c.height);
+    P.forEach(p=>{p.y+=p.vy;p.x+=p.vx;p.a+=.1;x.save();x.translate(p.x,p.y);x.rotate(p.a);
+      x.fillStyle=p.col;x.fillRect(-p.r/2,-p.r/2,p.r,p.r);x.restore();});
+    if(f++<140) requestAnimationFrame(loop); else x.clearRect(0,0,c.width,c.height);
+  })();
+}
+</script>
+</body>
+</html>
