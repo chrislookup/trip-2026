@@ -244,7 +244,7 @@ if(SUPABASE_URL.includes("YOUR-PROJECT")){
   db = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 }
 renderGate();
-if(me) startApp();
+if(me) startApp(); else $("#gate").style.display="block";
 
 /* ---------- name gate ---------- */
 function renderGate(){
